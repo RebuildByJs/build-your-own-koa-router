@@ -27,6 +27,7 @@ methods.forEach((method) => {
 
     let middlewares = Array.prototype.slice.call(arguments, 1);
     this.register(path, [method], middlewares);
+    return this;
   };
 }, this);
 
@@ -36,6 +37,10 @@ Router.prototype.register = function (path, method, middlewares) {
     Object.keys(this.params).forEach((paramName) => {
       router.param(paramName, this.params[paramName]);
     });
+
+    this.stack.push(router);
+
+    return this;
 };
 
 Router.prototype.use = function () {
@@ -55,16 +60,33 @@ Router.prototype.match = function (path, method) {
   };
 
   layers.forEach((layer) => {
-    if (layer.path === path) {
+    if (layer.path === path || layer.path === '*') {
       matched.path.push(layer);
       if (layer.methods.length === 0 || ~layer.methods.indexOf(method)) {
         matched.pathAndMethods.push(layer);
-        if (laery.methods.length) matched.router = true;
+        if (layer.methods.length) matched.router = true;
       }
     }
   });
 
   return matched;
+};
+
+Router.prototype.compose = function (ctx, final) {
+  let index = -1;
+  final = final || (() => {});
+  return (middlewares) => {
+    function dispatch (i) {
+      if (i < index) throw new Error('cannot excute next twice in a function.');
+      index = i;
+      if (i === middlewares.length - 1) dispatch = final;
+      let fn = middlewares[index];
+      return Promise.resolve(fn(ctx, () => {
+        return dispatch(i + 1);
+      }));
+    }
+    return dispatch(0);
+  };
 };
 
 Router.prototype.routes = function () {
@@ -78,7 +100,20 @@ Router.prototype.routes = function () {
     console.log(method);
     let matched = router.match(path, method);
     console.log(matched);
-    return next();
+    
+    let layerChain = matched.pathAndMethods.reduce((memo, layer) => {
+      
+      memo.push((ctx, next) => {
+        ctx.router = layer;
+        ctx.params = {};
+        return next();
+      });
+
+      memo = memo.concat(layer.stack);
+      return memo;
+    }, []);
+    console.log(layerChain);
+    return router.compose(ctx)(layerChain).then(next);
   }
 
   dispatch.router = router;
@@ -92,5 +127,7 @@ Router.prototype.allowedMethods = function () {
     return next();
   };
 };
+
+
 
 module.exports = Router;
