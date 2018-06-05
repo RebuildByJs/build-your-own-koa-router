@@ -1,0 +1,26 @@
+{
+  "name": "build-your-own-koa-router",
+  "version": "1.0.0",
+  "description": "",
+  "main": "layer.js",
+  "directories": {
+    "example": "example"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RebuildByJs/build-your-own-koa-router.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/RebuildByJs/build-your-own-koa-router/issues"
+  },
+  "homepage": "https://github.com/RebuildByJs/build-your-own-koa-router#readme",
+  "dependencies": {
+    "koa": "^2.5.1"
+  }
+}
