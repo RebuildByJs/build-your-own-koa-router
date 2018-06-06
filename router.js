@@ -44,7 +44,28 @@ Router.prototype.register = function (path, method, middlewares) {
 };
 
 Router.prototype.use = function () {
+  let router = this;
+  let middlewares = Array.prototype.slice.call(arguments, 0);
+  let path;
 
+  let hasPath = typeof middlewares[0] === 'string';
+  if (hasPath) {
+    path = middlewares.shift();
+  }
+
+  middlewares.forEach((m) => {
+    if (m.router) {
+      m.stack.forEach((layer) => {
+        router.stack.push(layer);
+      });
+
+      Object.keys(this.params).forEach((paramName) => {
+        router.param(paramName, this.params[paramName]);
+      });
+    } else {
+      this.register(path || '*', [], middlewares);
+    }
+  });
 };
 
 Router.prototype.params = function () {
@@ -72,20 +93,22 @@ Router.prototype.match = function (path, method) {
   return matched;
 };
 
-Router.prototype.compose = function (ctx, final) {
-  let index = -1;
-  final = final || (() => {});
-  return (middlewares) => {
+Router.prototype.compose = function (middlewares) {
+  if (!Array.isArray(middlewares)) throw new Error('middlewares nust be array');
+  return (ctx, final) => {
+    final = final || (() => {});
+    let index = -1;
+    return dispatch(0);
     function dispatch (i) {
       if (i < index) throw new Error('cannot excute next twice in a function.');
       index = i;
       if (i === middlewares.length - 1) dispatch = final;
       let fn = middlewares[index];
+      if (!fn) return Promise.resolve();
       return Promise.resolve(fn(ctx, () => {
         return dispatch(i + 1);
       }));
     }
-    return dispatch(0);
   };
 };
 
@@ -93,14 +116,14 @@ Router.prototype.routes = function () {
   const router = this;
 
   function dispatch (ctx, next) {
-    console.log('routes');
     let path = ctx.path;
-    console.log(path);
+    console.log('path', path);
     let method = ctx.method;
-    console.log(method);
+    console.log('method', method);
     let matched = router.match(path, method);
     console.log(matched);
-    
+    ctx.matched = matched.path;
+
     let layerChain = matched.pathAndMethods.reduce((memo, layer) => {
       
       memo.push((ctx, next) => {
@@ -112,8 +135,8 @@ Router.prototype.routes = function () {
       memo = memo.concat(layer.stack);
       return memo;
     }, []);
-    console.log(layerChain);
-    return router.compose(ctx)(layerChain).then(next);
+
+    return router.compose(layerChain)(ctx).then(next);
   }
 
   dispatch.router = router;
@@ -122,9 +145,29 @@ Router.prototype.routes = function () {
 };
 
 Router.prototype.allowedMethods = function () {
+  let methods = this.methods;
   return function allowedMethods (ctx, next) {
-    console.log('allowed');
-    return next();
+    let allowed = ctx.matched.reduce((memo, layer) => {
+      return memo.concat(layer.methods);
+    }, []);
+    return next().then(() => {
+      if (!ctx.status || ctx.status === 404) {
+        console.log('not found');
+        let matched = ctx.matched;
+        if (!methods.includes(ctx.method)) {
+          ctx.status = 501;
+          ctx.body = 'not support';
+        } else if (matched.length) {
+          if (ctx.method === 'OPTIONS') {
+            ctx.status = 200;
+            ctx.set('Allow', allowed.join(' '));
+          } else if (!allowed.includes(ctx.methods)) {
+            ctx.status = 405;
+            ctx.body = 'method is not allowed';
+          }
+        }
+      }
+    });
   };
 };
 
