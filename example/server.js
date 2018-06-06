@@ -6,10 +6,13 @@ const router = new Router();
 
 router.get('/', async (ctx, next) => {
   ctx.body = 'index';
+}, async () => {
+  console.log('second async');
+  next();
 });
 
 router.post('/post', async (ctx, next) => {
-
+  ctx.body = 'post'
 });
 
 koa.use(router.routes());
